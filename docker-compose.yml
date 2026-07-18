@@ -1,0 +1,140 @@
+name: vcbrain
+
+x-backend-env: &backend-env
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://vcbrain:${POSTGRES_PASSWORD:-vcbrain-local-only}@db:5432/vcbrain
+    REDIS_URL: redis://cache:6379/0
+    S3_ENDPOINT: http://storage:9000
+    STORAGE_BACKEND: s3
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: backend/Dockerfile
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vcbrain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vcbrain-local-only}
+      POSTGRES_DB: vcbrain
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vcbrain -d vcbrain"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redisdata:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  storage:
+    image: minio/minio:latest
+    command: server /data --console-address ":9002"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-vcbrain}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-vcbrain-local-storage-only}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9005:9000"
+      - "9001:9002"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  storage-init:
+    image: minio/mc:latest
+    depends_on:
+      storage:
+        condition: service_healthy
+    entrypoint: >-
+      /bin/sh -c "mc alias set local http://storage:9000
+      ${S3_ACCESS_KEY:-vcbrain} ${S3_SECRET_KEY:-vcbrain-local-storage-only};
+      mc mb --ignore-existing local/${S3_BUCKET_DECKS:-vcbrain-decks};
+      mc mb --ignore-existing local/${S3_BUCKET_SNAPSHOTS:-vcbrain-snapshots};
+      mc mb --ignore-existing local/${S3_BUCKET_EXPORTS:-vcbrain-exports};"
+    restart: "no"
+
+  api:
+    build: *backend-build
+    <<: *backend-env
+    command: >-
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --log-config /srv/config/logging.conf"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+
+  worker:
+    build: *backend-build
+    <<: *backend-env
+    command: ["arq", "app.workers.arq_app.WorkerSettings"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build: *backend-build
+    <<: *backend-env
+    command: ["arq", "app.workers.arq_app.SchedulerSettings"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  n8n:
+    profiles: ["orchestration"]
+    image: n8nio/n8n:latest
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-operator}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-change-me}
+      VCBRAIN_API: http://api:8000/api/v1
+      VCBRAIN_SERVICE_TOKEN: ${SERVICE_TOKEN:-local-service-token-change-before-deploy}
+      VCBRAIN_ORG_ID: ${VCBRAIN_ORG_ID:-}
+    volumes:
+      - n8ndata:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  miniodata: {}
+  n8ndata: {}

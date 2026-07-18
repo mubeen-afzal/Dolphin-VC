@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vcbrain-backend"
+version = "0.1.0"
+description = "Frontend-agnostic VC Brain API for sourcing, screening, diligence, and decisions"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.5,<3",
+  "sqlalchemy[asyncio]>=2.0.35,<3",
+  "asyncpg>=0.29,<1",
+  "alembic>=1.13,<2",
+  "redis>=5,<7",
+  "arq>=0.26,<1",
+  "PyJWT>=2.9,<3",
+  "argon2-cffi>=23.1,<26",
+  "python-multipart>=0.0.12,<1",
+  "httpx[http2,socks]>=0.27,<1",
+  "tenacity>=9,<10",
+  "structlog>=24,<26",
+  "prometheus-client>=0.21,<1",
+  "boto3>=1.35,<2",
+  "pypdf>=5,<7",
+  "python-pptx>=1,<2",
+  "email-validator>=2.2,<3",
+  "defusedxml>=0.7,<1",
+  "orjson>=3.10,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "aiosqlite>=0.20,<1",
+  "asgi-lifespan>=2.1,<3",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "pytest-cov>=6,<8",
+  "respx>=0.22,<1",
+  "ruff>=0.9,<1",
+  "mypy>=1.14,<2",
+  "types-redis>=4.6",
+  "types-defusedxml>=0.7",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+  "integration: requires the application lifespan",
+  "postgres: requires PostgreSQL",
+  "resilience: fault-injection tests",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S"]
+ignore = ["S101", "B008", "E501", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["tests", "alembic"]
