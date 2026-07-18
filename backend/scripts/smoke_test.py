@@ -8,7 +8,7 @@ import httpx
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test a running VC Brain API")
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--email", default="demo@vcbrain.local")
+    parser.add_argument("--email", default="demo@vcbrain.dev")
     parser.add_argument("--password", default="Demo-password-42!")
     args = parser.parse_args()
 

@@ -46,7 +46,7 @@ async def seed() -> None:
         await seed_reference_data(session, settings)
         existing = await session.scalar(select(Org).where(Org.slug == "demo-fund"))
         if existing:
-            print("Demo seed already exists: demo@vcbrain.local / Demo-password-42!")
+            print("Demo seed already exists: demo@vcbrain.dev / Demo-password-42!")
             await database.dispose()
             return
 
@@ -55,7 +55,7 @@ async def seed() -> None:
         await session.flush()
         user = User(
             org_id=org.id,
-            email="demo@vcbrain.local",
+            email="demo@vcbrain.dev",
             password_hash=hash_password("Demo-password-42!"),
             full_name="Demo Partner",
             role=UserRole.OWNER,
@@ -232,7 +232,7 @@ async def seed() -> None:
             )
         )
         await session.commit()
-        print("Seeded demo@vcbrain.local / Demo-password-42!")
+        print("Seeded demo@vcbrain.dev / Demo-password-42!")
     await database.dispose()
 
 

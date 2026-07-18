@@ -54,7 +54,7 @@ Then open:
 Demo credentials after `make seed`:
 
 ```text
-demo@vcbrain.local / Demo-password-42!
+demo@vcbrain.dev / Demo-password-42!
 ```
 
 The committed `.env` contains local-only, non-production values so the project can start immediately. It is ignored by Git. Replace all credentials before any shared or public deployment.

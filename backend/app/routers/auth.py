@@ -119,6 +119,11 @@ async def login_endpoint(
     )
     org = await session.get(Org, user.org_id)
     await session.commit()
+    await session.refresh(user)
+
+    if org is not None:
+        await session.refresh(org)
+
     set_token_cookies(response, settings, tokens.refresh_token)
     return AuthResponse(
         access_token=tokens.access_token,

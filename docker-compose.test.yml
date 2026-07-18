@@ -1,3 +1,5 @@
+name: vcbrain-test
+
 services:
   test-db:
     image: pgvector/pgvector:pg16
