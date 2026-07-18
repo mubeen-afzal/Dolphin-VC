@@ -21,11 +21,25 @@ There is deliberately no `overall_score`: the three screening axes remain indepe
 
 Requirements: Docker with Compose v2.
 
+Create and configure the environment file once:
+
 ```bash
 cp .env.example .env
 # Set SECRET_KEY, POSTGRES_PASSWORD, and S3_SECRET_KEY.
+```
+
+After `.env` is configured, start the complete backend stack:
+
+```bash
 docker compose up --build -d
-docker compose run --rm api python -m scripts.seed
+docker compose ps
+curl --fail http://localhost:8000/readyz
+```
+
+Optionally load the deterministic demo organization, user, thesis, and opportunity:
+
+```bash
+make seed
 ```
 
 Then open:
@@ -60,13 +74,27 @@ make openapi     # regenerate docs/openapi.json
 make down
 ```
 
-Run n8n only when operator workflows are needed:
+## Query-driven harvesting
 
-```bash
-docker compose --profile orchestration up -d n8n
+Harvesting is initiated on demand rather than on a daily schedule. An authenticated frontend or API client sends a search query to:
+
+```http
+POST /api/v1/admin/harvest
+Authorization: Bearer <access-or-service-token>
+Content-Type: application/json
 ```
 
-n8n is never part of core execution and never accesses the database directly.
+Example request body:
+
+```json
+{
+  "query": "AI healthcare startups in Germany",
+  "channels": "auto",
+  "limit": 25
+}
+```
+
+The endpoint returns a `job_id`. Subscribe to `/api/v1/jobs/{job_id}/events` for live progress or poll `/api/v1/jobs/{job_id}`. The existing Redis/arq worker performs harvesting asynchronously. Set `DEMO_MODE=false` to enable real network harvesting; Tavily additionally requires `TAVILY_API_KEY`.
 
 ## Architecture
 
@@ -168,10 +196,9 @@ vcbrain/
 │   ├── scripts/                Seed, OpenAPI export, smoke and test scripts
 │   └── tests/                  Unit through resilience tests
 ├── docs/                       Architecture, integration, testing, OpenAPI
-└── n8n/                        Optional operator workflow exports
+└── Makefile                    Common development and operational commands
 ```
 
 ## Production extension points
 
 The foundation runs end to end without external credentials. For a production deployment, connect an email provider for verification/reset delivery, an outbound mail adapter after human approval, production tracing/error reporting, and any licensed company/funding data sources permitted by their terms. Binary PDF/DOCX memo export is intentionally represented as an adapter boundary; Markdown memo content is already available through the API.
-
