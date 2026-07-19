@@ -1,0 +1,58 @@
+Ideal VC Brain UI Flow
+The UI should begin with an investor’s thesis and end with a human-approved investment decision, backed by evidence. The system assists; it never silently decides or sends money.
+Start: investor setup and dashboard
+The first screen is a simple investor dashboard:
+Configure or select a fund thesis: sectors, geography, stage, check size, risk appetite, must-haves, and deal breakers.
+See a ranked decision queue, incoming applications, recently discovered founders, candidates close to the 24-hour deadline, and candidates needing review.
+Start either path:Inbound: a founder submits company name, deck, and optional website, GitHub, demo, and work samples.
+Outbound: an investor searches or monitors sources such as GitHub, hackathons, launch posts, papers, and accelerators.
+
+Candidate workspace: the main working screen
+Every inbound or outbound candidate lands in the same workspace.
+The investor sees:
+Candidate and company profile, source timeline, founder history, and linked evidence.
+A clear “what the system knows / does not know” panel.
+Three separate scores: Founder, Market, and Idea vs. Market - never one blended score.
+Claim-level trust: source, quote/snippet, freshness, corroboration, contradictions, and confidence.
+A 24-hour decision timer.
+The investor can intervene at any point:
+Approve or reject identity matches and duplicates.
+Add a deck, website, GitHub repo, reference, note, or source manually.
+Mark a claim as disputed, verified, irrelevant, or requiring follow-up.
+Ask the system to refresh research, run a targeted search, or request information from the founder.
+Change the fund thesis or switch the candidate to another thesis, then re-run scoring.
+Pause, cancel, or resume background research.
+Override a recommendation, but only with a written rationale.
+Important: edits should create a new version or audit event. The UI must preserve what the system originally concluded and why; a user should not be able to silently rewrite evidence or scores.
+Diligence and memo
+Once the investor is satisfied with the evidence, they open a decision-ready memo:
+Company snapshot and investment hypothesis.
+Founder/team evidence.
+Market, competition, SWOT, product, traction, and risks.
+Explicit evidence citations beside material claims.
+Gaps and the next best diligence questions.
+Bull case, bear case, kill criteria, and recommendation conditions.
+The investor can regenerate individual sections after adding evidence, but the old memo remains available as a version.
+End: human decision and handoff
+The final screen asks for one intentional action:
+Invest: e.g. “Recommend $100K, subject to reference verification.”
+Watchlist: keep monitoring signals and specify what would change the decision.
+Request information: send a human-approved follow-up request.
+Pass: record an evidence-based rationale.
+The output is not merely a score. It is a persistent candidate record containing:
+decision and rationale;
+full memo;
+evidence and contradictions;
+score history;
+founder profile that improves with future signals;
+source-channel outcome data for future sourcing.
+After “Invest,” the hackathon scope ends with a handoff to fund operations. Portfolio management, contracts, and money transfer remain outside this product.
+Minimum user input vs. final output
+Stage	User provides	User receives
+Fund setup	Investment thesis	Filter and scoring lens
+Inbound	Company name + deck; optional links	Parsed candidate and initial evidence
+Outbound	Search/thesis or monitored sources	Ranked founder candidates
+Review	Corrections, extra documents, follow-up requests	Refreshed scores and trust assessment
+Decision	Final human rationale	Investment memo and auditable outcome
+
+This is the UI flow the current backend should eventually support. The key experience is a calm investor workspace: the AI gathers and explains; the human reviews, challenges, modifies, and makes the final call.

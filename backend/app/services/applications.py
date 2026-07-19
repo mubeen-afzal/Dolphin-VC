@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import Application, Company, Document, Job, Opportunity, Thesis
 from app.errors import AppError
+from app.services.ingestion import ensure_application_founder
 from app.services.object_store import ObjectStore, sniff_document_mime
 from app.services.utils import normalize_name, utcnow
 from app.types import ApplicationStatus, JobStatus, OpportunityOrigin, OpportunityStage
@@ -143,6 +144,15 @@ async def create_application(
         )
         session.add(opportunity)
         await session.flush()
+
+    await ensure_application_founder(
+        session,
+        company=company,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        website=website,
+        artifacts=artifacts,
+    )
 
     tracking_token = secrets.token_urlsafe(24) if public else None
     application = Application(

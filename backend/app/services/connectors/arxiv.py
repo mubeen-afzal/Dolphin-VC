@@ -39,7 +39,7 @@ class ArxivConnector(Connector):
             params={"search_query": f"all:{query}", "start": 0, "max_results": min(limit, 100)},
         )
         response.raise_for_status()
-        from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
+        from defusedxml import ElementTree as ET
 
         root = ET.fromstring(response.text)
         ns = {"a": "http://www.w3.org/2005/Atom"}
