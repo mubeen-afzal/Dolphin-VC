@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import (
@@ -34,6 +35,7 @@ from app.services.connectors import (
     TavilyConnector,
 )
 from app.services.extraction import ExtractedClaim, extract_claims
+from app.services.ingestion import resolve_outbound_signal
 from app.services.memo import compose_memo
 from app.services.object_store import ObjectStore
 from app.services.parse.deck import ParsedPage, parse_deck
@@ -55,7 +57,7 @@ from app.types import (
 )
 
 
-async def _process_harvest(session: object, settings: Settings, job: Job) -> None:
+async def _process_harvest(session: object, settings: Settings, job: Job) -> list[uuid.UUID]:
     connector_types: dict[str, Any] = {
         "github": GitHubConnector,
         "hackernews": HackerNewsConnector,
@@ -71,6 +73,8 @@ async def _process_harvest(session: object, settings: Settings, job: Job) -> Non
     query = str(job.input.get("query") or "AI startup")
     limit = min(100, int(job.input.get("limit") or 25))
     ingested = 0
+    resolved = 0
+    child_job_ids: list[uuid.UUID] = []
     failures: list[dict[str, str]] = []
     if settings.demo_mode:
         keys = []
@@ -109,23 +113,56 @@ async def _process_harvest(session: object, settings: Settings, job: Job) -> Non
                 )
                 if duplicate:
                     continue
-                session.add(  # type: ignore[attr-defined]
-                    Signal(
-                        org_id=job.org_id,
-                        source_id=source.id,
-                        kind=item.kind,
-                        external_id=item.external_id,
-                        url=item.url,
-                        title=item.title,
-                        body=item.body,
-                        payload=item.payload,
-                        content_hash=item.content_hash,
-                        strength=Decimal(str(item.strength)),
-                        observed_at=item.observed_at,
-                    )
+                signal = Signal(
+                    org_id=job.org_id,
+                    source_id=source.id,
+                    kind=item.kind,
+                    external_id=item.external_id,
+                    url=item.url,
+                    title=item.title,
+                    body=item.body,
+                    payload={
+                        **item.payload,
+                        "identity_hints": [
+                            {
+                                "provider": hint.provider,
+                                "value": hint.value,
+                                "confidence": hint.confidence,
+                            }
+                            for hint in item.identities
+                        ],
+                    },
+                    content_hash=item.content_hash,
+                    strength=Decimal(str(item.strength)),
+                    observed_at=item.observed_at,
                 )
+                session.add(signal)  # type: ignore[attr-defined]
+                await session.flush()  # type: ignore[attr-defined]
+                candidate = await resolve_outbound_signal(
+                    cast(AsyncSession, session),
+                    settings,
+                    signal=signal,
+                    source_id=source.id,
+                    channel=channel,
+                )
+                screening_job = Job(
+                    org_id=job.org_id,
+                    kind="screen",
+                    status=JobStatus.QUEUED,
+                    target_type="opportunity",
+                    target_id=candidate.opportunity.id,
+                    idempotency_key=f"outbound-signal:{signal.id}",
+                    input={
+                        "opportunity_id": str(candidate.opportunity.id),
+                        "signal_id": str(signal.id),
+                    },
+                )
+                session.add(screening_job)  # type: ignore[attr-defined]
+                await session.flush()  # type: ignore[attr-defined]
+                child_job_ids.append(screening_job.id)
                 channel.discovered_count += 1
                 ingested += 1
+                resolved += 1
             source.status = SourceStatus.ACTIVE
             source.last_ok_at = utcnow()
             await session.commit()  # type: ignore[attr-defined]
@@ -156,8 +193,14 @@ async def _process_harvest(session: object, settings: Settings, job: Job) -> Non
     job.progress = Decimal("100")
     job.current_step = "done"
     job.finished_at = utcnow()
-    job.result = {"signals_ingested": ingested, "failures": failures}
+    job.result = {
+        "signals_ingested": ingested,
+        "candidates_resolved": resolved,
+        "screening_jobs": [str(item) for item in child_job_ids],
+        "failures": failures,
+    }
     await session.commit()  # type: ignore[attr-defined]
+    return child_job_ids
 
 
 async def _step(
@@ -428,7 +471,17 @@ async def process_job(
         await session.commit()
         try:
             if job.kind == "ingest.harvest":
-                await _process_harvest(session, settings, job)
+                child_job_ids = await _process_harvest(session, settings, job)
+                # Imported here to avoid the jobs -> pipeline worker import cycle.
+                from app.services.jobs import dispatch_job
+
+                for child_job_id in child_job_ids:
+                    await dispatch_job(
+                        database=database,
+                        settings=settings,
+                        store=store,
+                        job_id=child_job_id,
+                    )
                 return
             opportunity_id = job.target_id or uuid.UUID(job.input["opportunity_id"])
             opportunity = await session.get(Opportunity, opportunity_id)
